@@ -18,25 +18,19 @@ public class MyServer {
 
 		ServerSocket ss = null;
 		try {
-			// 服务器端在30000号端口监听
-			ss = new ServerSocket(30000);
-			System.out.println("Server started,listening at port 30000...");
+			// 服务器端在默认端口30000号端口监听
+			ss = new ServerSocket(Constants.DEFAULT_BIND_PORT);
+			System.out.println("Server started,listening at port ..." + Constants.DEFAULT_BIND_PORT);
 			while (true) {
 				// 此行代码会阻塞，直到客户端的连接出现
 				Socket s = ss.accept();
 				socketList.add(s);
 				// 每当客户端连接后，启动一条ServerThread线程为该客户端服务
-				new Thread(new ServerThread(s)).start();
+				new Thread(new ServerThread1(s)).start();
 			}
 		} catch (Exception e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
-		} finally {
-			
-			if (ss != null) {
-				ss.close();
-			}
-
-		}
+		} 
 	}
 }
