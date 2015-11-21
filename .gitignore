@@ -3,6 +3,7 @@ bin/
 *.class
 
 .classpath
+.project
 
 # .csv files containing the AP info
 *.csv
