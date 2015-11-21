@@ -111,7 +111,7 @@ public class ServerThread1 implements Runnable{
 				
 				//将服务器端执行结果返回给客户端
 				sendToClient(flag);
-				System.out.println(TAG + ":" + "已向客户端发送flag");
+				System.out.println(TAG + ": " + "已向客户端发送flag");
 			}
 			
 		} else {
