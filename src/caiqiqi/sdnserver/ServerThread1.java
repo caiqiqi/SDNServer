@@ -5,6 +5,8 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.ObjectInputStream;
+import java.io.OutputStream;
+import java.io.PrintWriter;
 import java.net.Socket;
 import java.util.HashMap;
 //import java.util.HashMap;
@@ -17,25 +19,27 @@ public class ServerThread1 implements Runnable{
 
 	public static String TAG ="ServerThread1";
 	
-	/**最近一次接收到的时间 */
-	private long lastReceiveTime = System.currentTimeMillis();
-	/**两次接收的延迟时间 3s */
-	private long receiveTimeDelay=3000;
 	/** 当前线程处理的Socket */
 	private Socket s;
 
 	private InputStream is;
 	private ObjectInputStream ois;
 
-	/** 服务器端接收到的List<ScanResult> */
+	private PrintWriter os;
+	
+	/** 服务器端接收到的List<ScanResult>
+	 * 这里不能引入ScanResult这个类，于是只能用Object代替
+	 *  */
 	private Object mList;
 	
+	/*while循环是否运行*/
 	private boolean isRunning = true;
 	
 	/**
+	 * 用来放扫描结果的，哦，错了，这里不应该为static，因为每个Socket对应一个ServerThread1
 	 * 以BSSID为键，String[]为值
 	 */
-	private static Map<String,String[]> mHashMap = new HashMap<String,String[]>();
+	private Map<String,String[]> mHashMap = new HashMap<String,String[]>();
 	
 	private File mCSVFile;
 	private CSVWriter mWriter;
@@ -43,7 +47,7 @@ public class ServerThread1 implements Runnable{
 	public ServerThread1(Socket s ) throws IOException {
 		
 		this.s = s;
-		mHashMap = new HashMap<String,String[]>();
+		this.mHashMap = new HashMap<String,String[]>();
 	}
 	
 	
@@ -59,26 +63,14 @@ public class ServerThread1 implements Runnable{
 				doThings();
 
 			} catch (IOException e) {
-				// 碰到异常则说明Socket已断开，则服务器这边也断开这个Socket
 				e.printStackTrace();
-				// try {
-				//
-				// this.is.close();
-				// this.s.close();
-				// this.is = null;
-				// this.s = null;
-				//
-				// } catch (IOException e1) {
-				// e1.printStackTrace();
-				// }
-
+				// 碰到异常则说明Socket已断开，则服务器这边也断开这个Socket
+				//closeSocket();
 			} catch (InterruptedException e) {
 				e.printStackTrace();
 			} catch (ClassNotFoundException e) {
 				e.printStackTrace();
 			}
-
-			// }
 		}
 		
 	}
@@ -86,11 +78,19 @@ public class ServerThread1 implements Runnable{
 
 
 	private void doThings() throws IOException, ClassNotFoundException, InterruptedException {
+		
+		/*返回给客户端的标志*/
+		boolean flag = false;
+		
 		is = this.s.getInputStream();
 		
 		if (is.available() > 0){
 			
-			ois = new ObjectInputStream(is);
+			//注意这里不能重复创建ois，只在第一次创建。
+			//由于会发几次热点信息过来，所以第二次发的时候就不必重复创建了，否则会出错
+			if (ois == null) {
+				ois = new ObjectInputStream(is);
+			}
 			mList = ois.readObject();
 			
 			//如果接收到的对象是一个List<String>的话
@@ -104,20 +104,49 @@ public class ServerThread1 implements Runnable{
 					line = ((List<String>) mList).get(i).toString();
 					strsline = line.split(",");
 					strBSSID = strsline[1];
-					mHashMap.put( strBSSID, strsline);
-									
+					mHashMap.put( strBSSID, strsline);				
 				}
-				writeToCSV();
+				//若成功写入服务器端的文件中，则flag置为true
+				flag = writeToCSV();
+				
+				//将服务器端执行结果返回给客户端
+				sendToClient(flag);
+				System.out.println(TAG + ":" + "已向客户端发送flag");
 			}
 			
 		} else {
 			Thread.sleep(10);
 		}
+		
+		
 	}
 
 
+/**
+ * 
+ * @param flag 服务器端是否已成功写入文件
+ */
+	private void sendToClient(boolean flag) {
+		
+		try {
+			
+			if (os == null) {
+				os = new PrintWriter(this.s.getOutputStream());
+			}
+			
+			os.println(flag);
+			os.flush();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
 
-	private synchronized void writeToCSV() {
+
+/**
+ * 写入到CSV文件
+ * @return 是否成功写入到CSV文件中
+ */
+	private boolean writeToCSV() {
 
 		try {
 
@@ -130,21 +159,35 @@ public class ServerThread1 implements Runnable{
 				}
 				mWriter.close();
 				System.out.println(TAG + ": " + "Writing to CSV successfully...");
+				return true;
 
 			}
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
+		
+		return false;
 	}
 
+/**
+ * 初始化文件写入
+ * @throws IOException
+ */
+	private void initFileWriter() {
 
-	private void initFileWriter() throws IOException {
+		try {
 
-		mCSVFile = new File(Constants.FILE_NAME);
-		if (!mCSVFile.exists()) {
-			mCSVFile.createNewFile();
+			mCSVFile = new File(Constants.FILE_NAME);
+
+			if (!mCSVFile.exists()) {
+				mCSVFile.createNewFile();
+			}
+			mWriter = new CSVWriter(new FileWriter(mCSVFile));
+		} catch (IOException e) {
+			System.out.println(TAG + "写入文件失败");
+			e.printStackTrace();
 		}
-		mWriter = new CSVWriter(new FileWriter(mCSVFile));
+
 	}
 
 	private void closeSocket() {
