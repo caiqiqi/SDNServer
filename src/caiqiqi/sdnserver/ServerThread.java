@@ -57,28 +57,6 @@ public class ServerThread implements Runnable {
 		
 		System.out.println("ServerThread started...for: " + counter);
 		
-		//设置Socket的超时时长
-//		try {
-//			this.s.setSoTimeout(5 * 1000);
-//		} catch (SocketException e) {
-//			e.printStackTrace();
-//		} 
-
-		// 采用循环不断从Socket中读取客户端发送过来的数据
-//		while ((content = readFromClient()) != null) {
-//			// TODO 服务器端处理一些逻辑，查询当前每个热点的连接数，然后再将结果返回客户端
-//			
-//			System.out.println( content );
-//			String[] strsContent = content.split(",");
-//			//第2个，也就是strContent[1]，就是BSSID
-//			String strBSSID = strsContent[1];
-//			mHashMap.put(strBSSID, strsContent);
-//			
-////			mWriter.writeNext(strContent);
-////			//哦，对嘛，不关闭CSVWriter怎么能写完呢
-////			closeWriter();
-////			System.out.println("Writing to CSV successfully...");
-//		}
 		try {
 			
 			this.ois = new ObjectInputStream(this.s.getInputStream());
