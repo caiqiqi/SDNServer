@@ -1,120 +1,216 @@
 package caiqiqi.sdnserver;
 
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.io.InputStreamReader;
+import java.io.InputStream;
 import java.io.ObjectInputStream;
+import java.io.PrintWriter;
 import java.net.Socket;
 import java.util.HashMap;
+//import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-//import com.opencsv.CSVReader;
 import com.opencsv.CSVWriter;
 
+public class ServerThread implements Runnable{
 
-public class ServerThread implements Runnable {
-
-	public static String TAG = "ServerThread";
-	// 当前线程处理的Socket
+	public static String TAG ="ServerThread";
+	
+	/** 当前线程处理的Socket */
 	private Socket s;
-	// 当前线程所处理的Socket所对应的输入流
-	private BufferedReader br;
-	
+
+	private InputStream is;
 	private ObjectInputStream ois;
+
+	private PrintWriter os;
 	
-	//服务器端接收到的List<ScanResult>
-	private Object mList;
+	/** 服务器端接收到的List<ScanResult>
+	 * 这里不能引入ScanResult这个类，于是只能用Object代替
+	 *  */
+	private Object objScanResult;
 	
-//	private PrintWriter  out;;
+	/*while循环是否运行*/
+	private boolean isRunning = true;
+	
+	/*返回给客户端的标志*/
+	boolean flag = false;
 	
 	/**
+	 * 用来放扫描结果的，哦，错了，这里不应该为static，因为每个Socket对应一个ServerThread
 	 * 以BSSID为键，String[]为值
 	 */
-	private static Map<String,String[]> mHashMap = new HashMap<String,String[]>();
-//	private List<String[] > mList_content;
+	private Map<String,String[]> mHashMap = new HashMap<String,String[]>();
 	
 	private File mCSVFile;
 	private CSVWriter mWriter;
 	
-	private static int counter = 0;
-
-	public ServerThread(Socket s) throws IOException {
+	public ServerThread(Socket s ) throws IOException {
 		
-		counter++;
 		this.s = s;
-		// 初始化该Socket对应的输入流
-		br = new BufferedReader(new InputStreamReader(s.getInputStream(), "utf-8"));
-		
-		mHashMap = new HashMap<String,String[]>();
-		
-		
+		this.mHashMap = new HashMap<String,String[]>();
 	}
-
+	
+	
+	
+	@Override
 	public void run() {
+
+		System.out.println("Socket " + this.s.getRemoteSocketAddress() + " accepted");
 		
-		System.out.println("ServerThread started...for: " + counter);
-		
-		try {
-			
-			this.ois = new ObjectInputStream(this.s.getInputStream());
-			mList = ois.readObject();
-			
-			//如果接收到的对象是一个List的话
-			if( mList instanceof List<?>){
-				
+		while (isRunning) {
+
+			try {
+
+				doThings();
+
+			} catch (IOException e) {
+				e.printStackTrace();
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			} catch (ClassNotFoundException e) {
+				e.printStackTrace();
 			}
-			
-		} catch (IOException e) {
-			e.printStackTrace();
-		} catch (ClassNotFoundException e) {
-			e.printStackTrace();
 		}
 		
-		System.out.println( "终于跳出while循环了" );
-		writeToCSV();
-		
-		
-		/*
-		 *  遍历socketList中的每个Socket
-		 *  将读到的内容向每个Socket发送一次
-		 */
-//		for (Socket s : MyServer.socketList) {
-//			//OutputStream os = s.getOutputStream();
-//			//TODO 服务器操作之后返回给客户端
-//			//os.write(...);
-//		}
 	}
 
-	private synchronized void writeToCSV() {
+
+
+	private void doThings() throws IOException, ClassNotFoundException, InterruptedException {
+		
+		is = this.s.getInputStream();
+		
+		if (is.available() > 0){
+			
+			//注意这里不能重复创建ois，只在第一次创建。
+			//由于会发几次热点信息过来，所以第二次发的时候就不必重复创建了，否则会出错
+			if (ois == null) {
+				ois = new ObjectInputStream(is);
+			}
+			objScanResult = ois.readObject();
+			
+			//如果接收到的对象是一个List<String>的话
+			if( objScanResult instanceof List<?>){
+				
+				//先将Object强制转换成List<String>
+				List<String> listScanResult = (List<String>)objScanResult;
+				putIntoHashMap( listScanResult );
+				//若成功写入服务器端的文件中，则flag置为true
+				flag = writeToCSV();
+				
+				//将服务器端执行结果返回给客户端
+				sendToClient(flag);
+				System.out.println(TAG + ": " + "已向客户端发送flag");
+			}
+			
+		} 
+		
+		
+	}
+
+
+/**
+ * 将接收到的List写入到HashMap
+ */
+	private void putIntoHashMap(List<String> list) {
+		
+		String line;
+		String[] strsline;
+		String strBSSID;
+		
+		for (int i=0; i< list.size(); i++){
+			line =list .get(i).toString();
+			strsline = line.split(",");
+			strBSSID = strsline[1];
+			mHashMap.put( strBSSID, strsline);				
+		}
+	}
+
+
+/**
+ * 
+ * @param flag 服务器端是否已成功写入文件
+ */
+	private void sendToClient(boolean flag) {
 		
 		try {
 			
-			initFileWriter();
+			if (os == null) {
+				os = new PrintWriter(this.s.getOutputStream());
+			}
 			
-			if(mHashMap != null){
-				//遍历HashMap的Value
-				for (String[] value : mHashMap.values()){
+			os.println(flag);
+			os.flush();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+
+
+/**
+ * 写入到CSV文件
+ * @return 是否成功写入到CSV文件中
+ */
+	private boolean writeToCSV() {
+
+		try {
+
+			initFileWriter();
+
+			if (mHashMap != null) {
+				// 遍历HashMap的Value
+				for (String[] value : mHashMap.values()) {
 					mWriter.writeNext(value);
 				}
 				mWriter.close();
-				System.out.println("Writing to CSV successfully...");
-				
+				System.out.println(TAG + ": " + "Writing to CSV successfully...");
+				return true;
+
 			}
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
+		
+		return false;
 	}
 
-	private void initFileWriter() throws IOException {
-		
-		mCSVFile = new File(Constants.FILE_NAME);
-		if( !mCSVFile.exists()){
-			mCSVFile.createNewFile();  
+/**
+ * 初始化文件写入
+ * @throws IOException
+ */
+	private void initFileWriter() {
+
+		try {
+
+			mCSVFile = new File(Constants.FILE_NAME);
+
+			if (!mCSVFile.exists()) {
+				mCSVFile.createNewFile();
+			}
+			mWriter = new CSVWriter(new FileWriter(mCSVFile));
+		} catch (IOException e) {
+			System.out.println(TAG + "写入文件失败");
+			e.printStackTrace();
 		}
-		mWriter = new CSVWriter(new FileWriter(mCSVFile) );
+
 	}
-	
+
+	private void closeSocket() {
+
+		if (isRunning)
+			isRunning = false;
+
+		if (s != null) {
+
+			try {
+				s.close();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+		System.out.println("关闭：" + s.getRemoteSocketAddress());
+	}
+
 }

@@ -6,4 +6,4 @@ bin/
 .project
 
 # .csv files containing the AP info
-*.csv
+#*.csv

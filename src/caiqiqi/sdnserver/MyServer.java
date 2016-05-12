@@ -28,16 +28,22 @@ public class MyServer {
 					s = ss.accept();
 					socketList.add(s);
 					
-					new Thread(new ServerThread1(s)).start();
+					new Thread(new ServerThread(s)).start();
 				}
 			} catch (IOException e) {
 				
+				e.printStackTrace();
 				//若捕获到异常则移除该Socket
 				if(s!= null){
 					
+					try {
+						s.close();
+						
+					} catch (IOException e1) {
+						e1.printStackTrace();
+					}
 					socketList.remove(s);
 				}
-				e.printStackTrace();
 			}
 	}
 }
