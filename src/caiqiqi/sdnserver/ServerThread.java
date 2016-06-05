@@ -57,7 +57,7 @@ public class ServerThread implements Runnable{
 	@Override
 	public void run() {
 
-		System.out.println("Socket " + this.s.getRemoteSocketAddress() + " accepted");
+		System.out.println("Socket " + " accepted" + this.s.getRemoteSocketAddress() );
 		
 		while (isRunning) {
 
