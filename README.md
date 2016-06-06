@@ -1,6 +1,6 @@
 # SDNServer
 
-This repo is the the server side of the [android-wifi-connecter1](https://github.com/caiqiqi/android-wifi-connecter1).
+This repo is the the server side of the [wifi-collector](https://github.com/caiqiqi/wifi-collector).
 
 ## Features
 - Accept connections(Socket) from the android client.
